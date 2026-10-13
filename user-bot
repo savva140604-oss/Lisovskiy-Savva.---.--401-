@@ -1,0 +1,98 @@
+import collections
+
+# Размер области сканирования вокруг бота (в клетках в каждую сторону)
+RADIUS = 40
+
+has_key = False  # подобран ли ключ
+
+
+def build_grid(check, x, y):
+    """Сканирует область вокруг бота и строит карту."""
+    grid = {}
+    for dx in range(-RADIUS, RADIUS + 1):
+        for dy in range(-RADIUS, RADIUS + 1):
+            gx, gy = x + dx, y + dy
+            if check("wall", gx, gy):
+                grid[(gx, gy)] = "wall"
+            elif check("gold", gx, gy):
+                grid[(gx, gy)] = "gold"
+            elif check("key", gx, gy):
+                grid[(gx, gy)] = "key"
+            elif check("door", gx, gy):
+                grid[(gx, gy)] = "door"
+            elif check("portal", gx, gy):
+                grid[(gx, gy)] = "portal"
+            else:
+                grid[(gx, gy)] = "empty"
+    return grid
+
+
+def bfs(grid, start, targets, has_key):
+    """Кратчайший путь от start до ближайшей клетки из targets."""
+    q = collections.deque([start])
+    prev = {start: None}
+    while q:
+        cur = q.popleft()
+        if cur != start and cur in targets:
+            path = []
+            while prev[cur] is not None:
+                path.append(cur)
+                cur = prev[cur]
+            path.reverse()
+            return path
+        cx, cy = cur
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            n = (cx + dx, cy + dy)
+            if n in prev:
+                continue
+            c = grid.get(n)
+            if c is None or c == "wall":
+                continue
+            if c == "door" and not has_key:
+                continue
+            prev[n] = cur
+            q.append(n)
+    return None
+
+
+def script(check, x, y):
+    global has_key
+
+    me = (x, y)
+    grid = build_grid(check, x, y)
+
+    if check("key", x, y):
+        has_key = True
+
+    # Что-то под ногами — берём
+    if check("gold", x, y) or check("key", x, y) or check("portal", x, y):
+        return "take"
+
+    # Собираем координаты всех целей
+    golds = {p for p, c in grid.items() if c == "gold"}
+    keys = {p for p, c in grid.items() if c == "key"}
+    doors = {p for p, c in grid.items() if c == "door"}
+    portals = {p for p, c in grid.items() if c == "portal"}
+
+    path = None
+    if golds:
+        path = bfs(grid, me, golds, has_key)
+    if not path and keys:
+        path = bfs(grid, me, keys, has_key)
+    if not path and has_key and doors:
+        path = bfs(grid, me, doors, has_key)
+    if not path and portals:
+        path = bfs(grid, me, portals, has_key)
+
+    if path:
+        nx, ny = path[0]
+        if nx > x:
+            return "right"
+        if nx < x:
+            return "left"
+        if ny > y:
+            return "down"
+        if ny < y:
+            return "up"
+
+    return "pass"
